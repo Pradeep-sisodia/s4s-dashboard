@@ -1,0 +1,14 @@
+{
+  "name": "s4s-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "S4S Salary 4 Sure — DRR Sanction Team Performance Dashboard",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "start": "npm run start --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
