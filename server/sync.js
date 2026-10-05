@@ -78,17 +78,29 @@ async function fetchMembers() {
 
 const AUTO_USER_ID = "__auto__";
 
+// CRM sanction total is loans.amount on disbursementDate.
+// loan_applied_amount is the customer request and runs higher than CRM.
+// approvalDate drops loans disbursed this month and keeps loans not yet disbursed.
+const EXCLUDED_LOAN_STATUSES = [
+  "REJECTED",
+  "CANCELLED",
+  "DELETED",
+  "BRE_REJECTED",
+  "HARD_REJECTED",
+  "SOFT_REJECTED",
+  "PENDING",
+  "ONBOARDING"
+];
+
 async function fetchPerformance(fromDate, toDate = fromDate) {
   const { rows } = await s4sPool.query(
     `
     WITH scoped AS (
       SELECT
         l.id,
-        l."approvalDate",
+        l."disbursementDate",
         l.is_repeat_loan,
         l.is_workflow_automated,
-        l.loan_sm_sh_approved_amount,
-        l.loan_cx_approved_amount,
         l.amount,
         l.loan_cx_approved_by_partner_user_id,
         l.loan_sm_sh_approved_by_partner_user_id,
@@ -96,12 +108,9 @@ async function fetchPerformance(fromDate, toDate = fromDate) {
         l.loan_sm_sh_assigned_partner_user_id,
         l.partner_user_id
       FROM loans l
-      WHERE l."approvalDate" >= $1::date
-        AND l."approvalDate" <= $2::date
-        AND l.status::text NOT IN (
-          'REJECTED', 'CANCELLED', 'DELETED', 'BRE_REJECTED',
-          'HARD_REJECTED', 'SOFT_REJECTED', 'PENDING', 'ONBOARDING'
-        )
+      WHERE l."disbursementDate" >= $1::date
+        AND l."disbursementDate" <= $2::date
+        AND l.status::text <> ALL($3::text[])
     ),
     latest_allot AS (
       SELECT DISTINCT ON (log."loanId")
@@ -122,19 +131,9 @@ async function fetchPerformance(fromDate, toDate = fromDate) {
         CASE WHEN COALESCE(l.is_workflow_automated, FALSE) THEN '${AUTO_USER_ID}' END
       ) AS partner_user_id,
       CASE WHEN COALESCE(l.is_repeat_loan, FALSE) THEN 'repeat' ELSE 'fresh' END AS team,
-      l."approvalDate"::text AS period_date,
+      l."disbursementDate"::text AS period_date,
       COUNT(*)::int AS achieved_count,
-      COALESCE(
-        SUM(
-          COALESCE(
-            l.loan_sm_sh_approved_amount,
-            l.loan_cx_approved_amount,
-            l.amount,
-            0
-          )
-        ),
-        0
-      )::float8 AS achieved_amount,
+      COALESCE(SUM(COALESCE(l.amount, 0)), 0)::float8 AS achieved_amount,
       COALESCE(SUM(r."totalObligation"), 0)::float8 AS raw_repay_amount,
       COALESCE(SUM(recv.received), 0)::float8 AS received_repay_amount
     FROM scoped l
@@ -153,7 +152,7 @@ async function fetchPerformance(fromDate, toDate = fromDate) {
     ) recv ON recv.loan_id = l.id
     GROUP BY 1, 2, 3
     `,
-    [fromDate, toDate]
+    [fromDate, toDate, EXCLUDED_LOAN_STATUSES]
   );
   return rows
     .filter((r) => r.partner_user_id)
@@ -167,32 +166,26 @@ async function fetchMonthMission(year, month) {
   const { rows } = await s4sPool.query(
     `
     SELECT
-      l."approvalDate"::date AS period_date,
+      l."disbursementDate"::date AS period_date,
       COUNT(*) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = FALSE)::int AS fresh_count,
       COUNT(*) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = TRUE)::int AS repeat_count,
       COALESCE(
-        SUM(
-          COALESCE(l.loan_sm_sh_approved_amount, l.loan_cx_approved_amount, l.amount, 0)
-        ) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = FALSE),
+        SUM(COALESCE(l.amount, 0)) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = FALSE),
         0
       )::float8 AS fresh_amount,
       COALESCE(
-        SUM(
-          COALESCE(l.loan_sm_sh_approved_amount, l.loan_cx_approved_amount, l.amount, 0)
-        ) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = TRUE),
+        SUM(COALESCE(l.amount, 0)) FILTER (WHERE COALESCE(l.is_repeat_loan, FALSE) = TRUE),
         0
       )::float8 AS repeat_amount
     FROM loans l
-    WHERE l."approvalDate" >= make_date($1::int, $2::int, 1)
-      AND l."approvalDate" < (make_date($1::int, $2::int, 1) + INTERVAL '1 month')
-      AND l.status::text NOT IN (
-        'REJECTED', 'CANCELLED', 'DELETED', 'BRE_REJECTED',
-        'HARD_REJECTED', 'SOFT_REJECTED', 'PENDING', 'ONBOARDING'
-      )
+    WHERE l."disbursementDate" >= make_date($1::int, $2::int, 1)
+      AND l."disbursementDate" < (make_date($1::int, $2::int, 1) + INTERVAL '1 month')
+      AND l."disbursementDate" <= (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+      AND l.status::text <> ALL($3::text[])
     GROUP BY 1
     ORDER BY 1
     `,
-    [year, month]
+    [year, month, EXCLUDED_LOAN_STATUSES]
   );
   return rows;
 }
@@ -436,6 +429,13 @@ export async function syncFromS4S(periodDate, toDate) {
     }
 
     await ensureTargets(performance);
+
+    await neonPool.query(
+      `DELETE FROM dashboard_mission_daily
+       WHERE period_date >= make_date($1::int, $2::int, 1)
+         AND period_date < (make_date($1::int, $2::int, 1) + INTERVAL '1 month')`,
+      [yy, mm]
+    );
 
     if (missionDays.length) {
       const mDays = missionDays.map((d) => d.period_date);

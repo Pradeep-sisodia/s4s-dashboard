@@ -10,9 +10,9 @@ function makePool(prefix) {
     user: process.env[`${prefix}_USER`],
     password: process.env[`${prefix}_PASSWORD`],
     ssl: ssl ? { rejectUnauthorized: false } : false,
-    max: 10,
+    max: Number(process.env.DB_POOL_MAX || 10),
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 20_000
+    connectionTimeoutMillis: 30_000
   });
 }
 
