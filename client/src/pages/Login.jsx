@@ -6,8 +6,8 @@ import { useAuth } from "../hooks/useAuth.jsx";
 export default function Login() {
   const { login, isAuthenticated, firstAllowedPath, pathForUser, booting } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("super@s4s.in");
-  const [password, setPassword] = useState("Super@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -75,8 +75,6 @@ export default function Login() {
         <button type="submit" disabled={busy}>
           {busy ? "Signing in…" : "Login"}
         </button>
-
-        <p className="login-hint">Default SUPER: super@s4s.in / Super@123</p>
       </motion.form>
     </div>
   );
