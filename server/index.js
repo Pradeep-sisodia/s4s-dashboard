@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { getDashboard, getLeaderboard, ensureFreshData } from "./data.js";
 import { ensureNeonSchema } from "./db.js";
 import { istDateString } from "./sync.js";
@@ -224,6 +227,25 @@ app.patch("/api/users/:id", ...authed, requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
+});
+
+const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../client/dist");
+const clientIndex = path.join(clientDist, "index.html");
+
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+}
+
+app.use((req, res) => {
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  if (!fs.existsSync(clientIndex)) {
+    return res
+      .status(404)
+      .send("Dashboard build missing. Build Command: npm install && npm run build");
+  }
+  res.sendFile(clientIndex);
 });
 
 app.listen(PORT, () => {
