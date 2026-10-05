@@ -10,7 +10,24 @@ function initials(name = "") {
     .join("");
 }
 
-export default function Header({ user, people, onMenu }) {
+function formatToday(iso) {
+  if (!iso) {
+    return new Date().toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+  }
+  return new Date(`${iso}T12:00:00+05:30`).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+export default function Header({ user, asOnDate, onMenu, onLogout }) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -24,30 +41,15 @@ export default function Header({ user, people, onMenu }) {
         <button className="icon-btn" onClick={onMenu} aria-label="Toggle menu">
           <Menu size={18} />
         </button>
-        <span className="live-pill">
-          <span className="live-dot" />
-          LIVE
+        <span className="today-pill">
+          <CalendarDays size={14} />
+          TODAY
+          <strong>{formatToday(asOnDate)}</strong>
         </span>
-        <div className="people-row">
-          {(people || []).map((p) => (
-            <div className="people-chip" key={p.email}>
-              <span className={`status-dot ${p.online ? "on" : ""}`} />
-              <span className="people-avatar">{initials(p.name)}</span>
-              <div>
-                <strong>{p.name}</strong>
-                <small>{p.email}</small>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
       <div className="topbar-right">
-        <button className="icon-btn">
+        <button className="icon-btn" type="button" aria-label="Notifications">
           <Bell size={18} />
-          <span className="badge">3</span>
-        </button>
-        <button className="icon-btn">
-          <CalendarDays size={18} />
         </button>
         <div className="clock">{now.toLocaleTimeString("en-IN")}</div>
         <div className="user-chip">
@@ -57,6 +59,11 @@ export default function Header({ user, people, onMenu }) {
             <small>{user?.role}</small>
           </div>
         </div>
+        {onLogout && (
+          <button type="button" className="logout-btn" onClick={onLogout}>
+            Logout
+          </button>
+        )}
       </div>
     </header>
   );

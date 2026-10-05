@@ -9,23 +9,27 @@ import {
   FileText,
   Target,
   Bell,
-  Settings
+  Settings,
+  Shield
 } from "lucide-react";
 import CircularProgress from "./CircularProgress.jsx";
 
 const links = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/fresh", label: "Fresh Team", icon: Users },
-  { to: "/repeat", label: "Repeat Team", icon: Repeat },
-  { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/targets", label: "Targets", icon: Target },
-  { to: "/alerts", label: "Alerts", icon: Bell },
-  { to: "/settings", label: "Settings", icon: Settings }
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, bucket: "dashboard" },
+  { to: "/fresh", label: "Fresh Team", icon: Users, bucket: "fresh" },
+  { to: "/repeat", label: "Repeat Team", icon: Repeat, bucket: "repeat" },
+  { to: "/leaderboard", label: "Leaderboard", icon: Trophy, bucket: "leaderboard" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, bucket: "analytics" },
+  { to: "/reports", label: "Reports", icon: FileText, bucket: "reports" },
+  { to: "/targets", label: "Targets", icon: Target, bucket: "targets" },
+  { to: "/alerts", label: "Alerts", icon: Bell, bucket: "alerts" },
+  { to: "/users", label: "Users & Access", icon: Shield, bucket: "users" },
+  { to: "/settings", label: "Settings", icon: Settings, bucket: "settings" }
 ];
 
-export default function Sidebar({ collapsed, mission }) {
+export default function Sidebar({ collapsed, mission, buckets = [], isAdmin = false }) {
+  const visible = links.filter((item) => isAdmin || buckets.includes(item.bucket));
+
   return (
     <aside className="sidebar">
       <div className="side-orbs" />
@@ -42,7 +46,7 @@ export default function Sidebar({ collapsed, mission }) {
       </div>
 
       <nav className="side-nav">
-        {links.map((item, i) => {
+        {visible.map((item, i) => {
           const Icon = item.icon;
           return (
             <motion.div
@@ -73,7 +77,7 @@ export default function Sidebar({ collapsed, mission }) {
           transition={{ delay: 0.4, duration: 0.6 }}
         >
           <div className="mission-card-title">{mission.label}</div>
-          <CircularProgress pct={mission.pct} />
+          <CircularProgress pct={mission.pct} size={96} stroke={9} />
           <div className="mission-card-meta">
             {mission.achievedLabel} / {mission.targetLabel}
           </div>

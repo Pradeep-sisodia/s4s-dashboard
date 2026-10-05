@@ -22,14 +22,19 @@ export default function Leaderboard() {
                 <th>Rank</th>
                 <th>Employee</th>
                 <th>Team</th>
-                <th>Achieved Amount</th>
-                <th>% Achievement</th>
+                <th>Target Cases</th>
+                <th>Cases</th>
+                <th>Target Amount</th>
+                <th>Sanction Amount</th>
+                <th>Total Repay Amount</th>
+                <th>Total Rec. Repay Amount</th>
+                <th>Repay %</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <motion.tr
-                  key={r.id}
+                  key={`${r.id}-${r.team}-${r.rank}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
@@ -38,14 +43,19 @@ export default function Leaderboard() {
                     <span className={`rank-pill ${r.rank <= 3 ? "hot" : ""}`}>{r.rank}</span>
                   </td>
                   <td className="emp">
-                    <b>{r.name}</b>
-                    <small>{r.email}</small>
+                    <b>{r.isAuto ? "AUTO" : r.name}</b>
+                    <small>{r.isAuto ? "workflow automated" : r.email}</small>
                   </td>
                   <td>{r.team.toUpperCase()}</td>
+                  <td>{r.isAuto ? "—" : r.targetCount ?? r.totalCount ?? 0}</td>
+                  <td>{r.achievedCount}</td>
+                  <td>{r.isAuto ? "—" : `₹${Number(r.targetAmount || 0).toLocaleString("en-IN")}`}</td>
                   <td>₹{r.achievedAmount.toLocaleString("en-IN")}</td>
+                  <td>₹{Number(r.rawRepayAmount || 0).toLocaleString("en-IN")}</td>
+                  <td>₹{Number(r.receivedRepayAmount || 0).toLocaleString("en-IN")}</td>
                   <td>
-                    <span className={`ach ${r.pctAchievement >= 100 ? "up" : "down"}`}>
-                      {r.pctAchievement.toFixed(2)}%
+                    <span className={`ach ${(r.repayPct || 0) > 0 ? "up" : "down"}`}>
+                      {Number(r.repayPct || 0).toFixed(2)}%
                     </span>
                   </td>
                 </motion.tr>
