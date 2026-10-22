@@ -3,6 +3,8 @@ import pg from "pg";
 
 function makePool(prefix) {
   const ssl = String(process.env[`${prefix}_SSL`] || "").toLowerCase() === "true";
+  // S4S prod is often firewalled from cloud hosts — fail fast so Neon can still serve.
+  const isS4S = prefix === "S4S_DB";
   return new pg.Pool({
     host: process.env[`${prefix}_HOST`],
     port: Number(process.env[`${prefix}_PORT`] || 5432),
@@ -10,9 +12,13 @@ function makePool(prefix) {
     user: process.env[`${prefix}_USER`],
     password: process.env[`${prefix}_PASSWORD`],
     ssl: ssl ? { rejectUnauthorized: false } : false,
-    max: Number(process.env.DB_POOL_MAX || 10),
+    max: Number(process.env.DB_POOL_MAX || (isS4S ? 4 : 10)),
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 30_000
+    connectionTimeoutMillis: Number(
+      process.env[`${prefix}_CONNECT_TIMEOUT_MS`] || (isS4S ? 8_000 : 20_000)
+    ),
+    keepAlive: true,
+    allowExitOnIdle: true
   });
 }
 

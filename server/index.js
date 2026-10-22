@@ -35,8 +35,8 @@ async function boot() {
   await ensureNeonSchema();
   await ensureAuthSeed();
   const today = istDateString();
-  // Warm IST today in background — dashboard won't wait on S4S after this
-  ensureFreshData(true, today, today).catch((err) =>
+  // Warm IST today in background — never block boot on S4S connectivity
+  ensureFreshData(false, today, today).catch((err) =>
     console.error("warmup sync failed", err.message)
   );
   setInterval(() => {

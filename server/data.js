@@ -109,6 +109,8 @@ async function buildTeamRows(fromDate, toDate, team) {
 let lastSyncKey = "";
 let lastSyncAt = 0;
 const SYNC_TTL_MS = 45_000;
+const SYNC_WAIT_MS = Number(process.env.SYNC_WAIT_MS || 8_000);
+const SYNC_FORCE_WAIT_MS = Number(process.env.SYNC_FORCE_WAIT_MS || 20_000);
 const syncInFlight = new Map();
 
 function startSync(from, to) {
@@ -131,6 +133,17 @@ function startSync(from, to) {
   return job;
 }
 
+function withTimeout(promise, ms, label = "timeout") {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(
+      () => resolve({ ok: false, timedOut: true, error: label }),
+      ms
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export async function ensureFreshData(force = false, fromDate, toDate) {
   await ensureNeonSchema();
   const today = istDateString();
@@ -143,35 +156,43 @@ export async function ensureFreshData(force = false, fromDate, toDate) {
     return { skipped: true, from, to };
   }
 
-  if (!force) {
-    const [{ rows: perfRows }, { rows: syncRows }] = await Promise.all([
-      neonPool.query(
-        `SELECT 1 FROM dashboard_performance
-         WHERE period_date >= $1::date AND period_date <= $2::date
-         LIMIT 1`,
-        [from, to]
-      ),
-      neonPool.query(
-        `SELECT 1 FROM dashboard_sync_log
-         WHERE status = 'ok'
-           AND message = $1
-           AND finished_at > NOW() - INTERVAL '12 hours'
-         LIMIT 1`,
-        [`Synced ${from}..${to}`]
-      )
-    ]);
+  const [{ rows: perfRows }, { rows: syncRows }] = await Promise.all([
+    neonPool.query(
+      `SELECT 1 FROM dashboard_performance
+       WHERE period_date >= $1::date AND period_date <= $2::date
+       LIMIT 1`,
+      [from, to]
+    ),
+    neonPool.query(
+      `SELECT 1 FROM dashboard_sync_log
+       WHERE status = 'ok'
+         AND message = $1
+         AND finished_at > NOW() - INTERVAL '12 hours'
+       LIMIT 1`,
+      [`Synced ${from}..${to}`]
+    )
+  ]);
 
-    // Serve Neon immediately (even if today is still empty) and refresh in background
-    if (perfRows.length || syncRows.length || key === lastSyncKey) {
-      startSync(from, to);
-      return { skipped: true, background: true, from, to };
-    }
+  const hasNeon = Boolean(perfRows.length || syncRows.length || key === lastSyncKey);
+
+  // Prefer Neon immediately; S4S sync must never take down the dashboard API.
+  if (!force && hasNeon) {
+    startSync(from, to);
+    return { skipped: true, background: true, from, to };
   }
 
-  // First cold load for this range — wait once so UI gets real data
-  const result = await startSync(from, to);
+  const waitMs = force ? SYNC_FORCE_WAIT_MS : SYNC_WAIT_MS;
+  const result = await withTimeout(startSync(from, to), waitMs, "S4S sync timed out");
   if (result?.ok === false) {
-    throw new Error(result.error || "Sync failed");
+    // Keep syncing in background if the wait timed out, but never throw.
+    return {
+      ok: false,
+      from,
+      to,
+      error: result.error || "Sync failed",
+      timedOut: Boolean(result.timedOut),
+      servedStale: true
+    };
   }
   return result;
 }
@@ -182,7 +203,14 @@ export async function getDashboard(opts = {}) {
   let to = normalizeDate(opts.to) || from;
   if (from > to) [from, to] = [to, from];
 
-  await ensureFreshData(Boolean(opts.force), from, to);
+  let syncMeta = null;
+  try {
+    syncMeta = await ensureFreshData(Boolean(opts.force), from, to);
+  } catch (err) {
+    // Neon-only fallback — dashboard must still load on Render if S4S is unreachable
+    console.error("ensureFreshData failed", err.message);
+    syncMeta = { ok: false, error: err.message, servedStale: true, from, to };
+  }
 
   const now = new Date(`${to}T12:00:00+05:30`);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -300,14 +328,27 @@ export async function getDashboard(opts = {}) {
         type: "warning",
         text: `Repay received ${combined.repayPct.toFixed(2)}% of raw obligation.`,
         time: "range"
-      }
+      },
+      ...(syncMeta?.ok === false
+        ? [
+            {
+              id: 4,
+              type: "warning",
+              text: `Live S4S sync delayed (${syncMeta.error || "timeout"}). Showing Neon cache.`,
+              time: "sync"
+            }
+          ]
+        : [])
     ],
     meta: {
       source: "neon",
       periodDate: from,
       fromDate: from,
       toDate: to,
-      syncedFrom: "s4s"
+      syncedFrom: "s4s",
+      syncOk: syncMeta?.ok !== false,
+      syncError: syncMeta?.ok === false ? syncMeta.error || null : null,
+      servedStale: Boolean(syncMeta?.servedStale)
     }
   };
 }
