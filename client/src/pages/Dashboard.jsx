@@ -210,7 +210,7 @@ export default function Dashboard() {
           )}
           {mode === "auto" && (
             <PerformanceTable
-              title="AUTO PERFORMANCE"
+              title="AUTO PERFORMANCE (Fresh + Repeat)"
               rows={[data.autoFresh, data.autoRepeat].filter(Boolean)}
               totals={data.autoTotals || emptyTotals}
               variant="auto"

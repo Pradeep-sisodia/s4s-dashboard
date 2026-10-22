@@ -456,6 +456,7 @@ select { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; 
 
 .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .tables-grid.single-table { grid-template-columns: 1fr; }
+.tables-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .table-card { background: #fff; border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 16px; }
 .table-card.auto tfoot tr { background: #ea580c; color: #fff; }
 .table-head { display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }

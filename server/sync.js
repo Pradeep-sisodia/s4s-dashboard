@@ -121,15 +121,18 @@ async function fetchPerformance(fromDate, toDate = fromDate) {
       ORDER BY log."loanId", log."allottedAt" DESC NULLS LAST, log.id DESC
     )
     SELECT
-      COALESCE(
-        lat.partner_user_id,
-        l.loan_cx_approved_by_partner_user_id,
-        l.loan_sm_sh_approved_by_partner_user_id,
-        l.loan_cx_assigned_partner_user_id,
-        l.loan_sm_sh_assigned_partner_user_id,
-        l.partner_user_id,
-        CASE WHEN COALESCE(l.is_workflow_automated, FALSE) THEN '${AUTO_USER_ID}' END
-      ) AS partner_user_id,
+      CASE
+        -- Auto-disbursed loans always roll up as AUTO inside Fresh/Repeat (never a human name)
+        WHEN COALESCE(l.is_workflow_automated, FALSE) THEN '${AUTO_USER_ID}'
+        ELSE COALESCE(
+          lat.partner_user_id,
+          l.loan_cx_approved_by_partner_user_id,
+          l.loan_sm_sh_approved_by_partner_user_id,
+          l.loan_cx_assigned_partner_user_id,
+          l.loan_sm_sh_assigned_partner_user_id,
+          l.partner_user_id
+        )
+      END AS partner_user_id,
       CASE WHEN COALESCE(l.is_repeat_loan, FALSE) THEN 'repeat' ELSE 'fresh' END AS team,
       l."disbursementDate"::text AS period_date,
       COUNT(*)::int AS achieved_count,

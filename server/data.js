@@ -231,14 +231,18 @@ export async function getDashboard(opts = {}) {
       [to]
     )
   ]);
-  const autoFresh = freshAll.find((r) => r.isAuto) || null;
-  const autoRepeat = repeatAll.find((r) => r.isAuto) || null;
-  // Keep AUTO inside same ranking as humans (by sanction/disbursed amount)
-  const fresh = freshAll;
-  const repeat = repeatAll;
+  // AUTO stays inside Fresh/Repeat by loan type (fresh auto → Fresh, repeat auto → Repeat)
+  const fresh = freshAll.map((r) =>
+    r.isAuto ? { ...r, name: "AUTO" } : r
+  );
+  const repeat = repeatAll.map((r) =>
+    r.isAuto ? { ...r, name: "AUTO" } : r
+  );
+  const autoFresh = fresh.find((r) => r.isAuto) || null;
+  const autoRepeat = repeat.find((r) => r.isAuto) || null;
 
-  const freshTotals = totals(freshAll);
-  const repeatTotals = totals(repeatAll);
+  const freshTotals = totals(fresh);
+  const repeatTotals = totals(repeat);
   const autoRows = [autoFresh, autoRepeat].filter(Boolean);
   const autoTotals = totals(autoRows);
 
@@ -284,10 +288,10 @@ export async function getDashboard(opts = {}) {
     freshTotals,
     repeatTotals,
     autoTotals,
-    freshTeam: freshAll,
-    repeatTeam: repeatAll,
-    topFresh: freshAll.slice(0, 3),
-    topRepeat: repeatAll.slice(0, 3),
+    freshTeam: fresh,
+    repeatTeam: repeat,
+    topFresh: fresh.slice(0, 3),
+    topRepeat: repeat.slice(0, 3),
     topAuto: autoRows,
     autoFresh,
     autoRepeat,
