@@ -19,6 +19,12 @@ function makePool(prefix) {
 export const s4sPool = makePool("S4S_DB");
 export const neonPool = makePool("NEON_DB");
 
+for (const pool of [s4sPool, neonPool]) {
+  pool.on("error", (err) => {
+    console.error("database pool error", err.message);
+  });
+}
+
 let schemaReady = false;
 
 export async function ensureNeonSchema() {
