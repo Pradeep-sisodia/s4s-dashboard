@@ -3,7 +3,7 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getDashboard, getLeaderboard, ensureFreshData } from "./data.js";
+import { getDashboard, getLeaderboard, ensureFreshData, getSyncStatus } from "./data.js";
 import { ensureNeonSchema } from "./db.js";
 import { istDateString } from "./sync.js";
 import { ALL_BUCKET_KEYS, BUCKETS, isAdminRole } from "./buckets.js";
@@ -51,7 +51,12 @@ boot().catch((err) => console.error("boot failed", err));
 app.get("/api/health", async (_req, res) => {
   try {
     await ensureNeonSchema();
-    res.json({ ok: true, service: "s4s-dashboard-api", db: "neon" });
+    res.json({
+      ok: true,
+      service: "s4s-dashboard-api",
+      db: "neon",
+      sync: getSyncStatus()
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

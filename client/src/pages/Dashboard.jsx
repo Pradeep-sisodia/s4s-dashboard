@@ -174,6 +174,21 @@ export default function Dashboard() {
         <p className="range-loading">Range data load ho raha hai — pehli baar month sync thoda time le sakta hai…</p>
       )}
 
+      {data?.meta?.syncOk === false && (
+        <p className="sync-banner">
+          Live S4S sync abhi cloud se connect nahi ho pa raha
+          {data.meta.syncError ? ` (${data.meta.syncError})` : ""}. Neon cache dikha rahe hain —
+          local app open karke sync karo, ya S4S DB pe Render IP whitelist karo.
+        </p>
+      )}
+
+      {!refreshing && (data?.kpis?.achievedCount || 0) === 0 && (
+        <p className="sync-banner warn">
+          Is date pe Neon mein cases nahi mile. Local pe ek baar dashboard kholo (S4S sync Neon fill
+          karega), phir production refresh karo.
+        </p>
+      )}
+
       <KpiCards kpis={kpis} />
       <MissionBar mission={data.mission} />
       <TopPerformers

@@ -113,17 +113,84 @@ const SYNC_WAIT_MS = Number(process.env.SYNC_WAIT_MS || 8_000);
 const SYNC_FORCE_WAIT_MS = Number(process.env.SYNC_FORCE_WAIT_MS || 20_000);
 const syncInFlight = new Map();
 
+/** After repeated S4S timeouts (common on Render), stop retrying briefly. */
+let s4sFailCount = 0;
+let s4sCircuitOpenUntil = 0;
+const S4S_CIRCUIT_MS = Number(process.env.S4S_CIRCUIT_MS || 15 * 60_000);
+
+function s4sSyncEnabled() {
+  return String(process.env.S4S_SYNC_ENABLED || "true").toLowerCase() !== "false";
+}
+
+function s4sCircuitOpen() {
+  return Date.now() < s4sCircuitOpenUntil;
+}
+
+function markS4SSuccess() {
+  s4sFailCount = 0;
+  s4sCircuitOpenUntil = 0;
+}
+
+function markS4SFailure(errMsg = "") {
+  s4sFailCount += 1;
+  const looksNetwork =
+    /timeout|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|Connection terminated/i.test(
+      String(errMsg || "")
+    );
+  if (looksNetwork || s4sFailCount >= 2) {
+    s4sCircuitOpenUntil = Date.now() + S4S_CIRCUIT_MS;
+    console.warn(
+      `S4S circuit open for ${Math.round(S4S_CIRCUIT_MS / 60000)}m — serving Neon only (${errMsg})`
+    );
+  }
+}
+
+export function getSyncStatus() {
+  return {
+    s4sSyncEnabled: s4sSyncEnabled(),
+    circuitOpen: s4sCircuitOpen(),
+    circuitOpenUntil: s4sCircuitOpenUntil || null,
+    failCount: s4sFailCount,
+    lastSyncKey: lastSyncKey || null,
+    lastSyncAt: lastSyncAt || null
+  };
+}
+
 function startSync(from, to) {
   const key = `${from}:${to}`;
+  if (!s4sSyncEnabled()) {
+    return Promise.resolve({
+      ok: false,
+      skipped: true,
+      error: "S4S sync disabled (S4S_SYNC_ENABLED=false)",
+      from,
+      to
+    });
+  }
+  if (s4sCircuitOpen()) {
+    return Promise.resolve({
+      ok: false,
+      skipped: true,
+      error: "S4S unreachable — circuit open, serving Neon cache",
+      from,
+      to
+    });
+  }
   if (syncInFlight.has(key)) return syncInFlight.get(key);
   const job = syncDateRange(from, to)
     .then((result) => {
-      lastSyncKey = key;
-      lastSyncAt = Date.now();
+      if (result?.ok === false) {
+        markS4SFailure(result.error || "sync failed");
+      } else {
+        markS4SSuccess();
+        lastSyncKey = key;
+        lastSyncAt = Date.now();
+      }
       return result;
     })
     .catch((err) => {
       console.error("background sync failed", err.message);
+      markS4SFailure(err.message);
       return { ok: false, error: err.message, from, to };
     })
     .finally(() => {
@@ -177,24 +244,38 @@ export async function ensureFreshData(force = false, fromDate, toDate) {
 
   // Prefer Neon immediately; S4S sync must never take down the dashboard API.
   if (!force && hasNeon) {
-    startSync(from, to);
-    return { skipped: true, background: true, from, to };
+    startSync(from, to); // may no-op if circuit open / disabled
+    return { skipped: true, background: true, from, to, ...getSyncStatus() };
+  }
+
+  // Render often cannot reach S4S — don't burn request time when circuit is open.
+  if (!s4sSyncEnabled() || s4sCircuitOpen()) {
+    return {
+      ok: false,
+      from,
+      to,
+      error: !s4sSyncEnabled()
+        ? "S4S sync disabled"
+        : "S4S unreachable from this host — showing Neon cache",
+      servedStale: true,
+      ...getSyncStatus()
+    };
   }
 
   const waitMs = force ? SYNC_FORCE_WAIT_MS : SYNC_WAIT_MS;
   const result = await withTimeout(startSync(from, to), waitMs, "S4S sync timed out");
   if (result?.ok === false) {
-    // Keep syncing in background if the wait timed out, but never throw.
     return {
       ok: false,
       from,
       to,
       error: result.error || "Sync failed",
       timedOut: Boolean(result.timedOut),
-      servedStale: true
+      servedStale: true,
+      ...getSyncStatus()
     };
   }
-  return result;
+  return { ...result, ...getSyncStatus() };
 }
 
 export async function getDashboard(opts = {}) {

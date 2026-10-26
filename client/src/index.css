@@ -252,6 +252,22 @@ select { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; 
   font-size: 13px;
   font-weight: 600;
 }
+.sync-banner {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.sync-banner.warn {
+  background: #fefce8;
+  color: #854d0e;
+  border-color: #fde047;
+}
 
 .dash-page { animation: fade-in 0.35s ease; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
